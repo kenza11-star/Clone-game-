@@ -325,3 +325,30 @@ body {
   margin-right: 10px;
   vertical-align: middle;
 }
+
+
+/* Panel toko: bisa digulir dan punya tombol X di pojok kanan atas */
+#shopPanel {
+  justify-content: flex-start;
+  overflow-y: auto;
+  padding: 64px 16px calc(24px + env(safe-area-inset-bottom, 0px));
+}
+#shopPanel > * {
+  flex-shrink: 0;
+}
+.closex {
+  position: fixed;
+  top: calc(14px + env(safe-area-inset-top, 0px));
+  right: 14px;
+  z-index: 40;
+  width: 44px;
+  height: 44px;
+  border: none;
+  border-radius: 22px;
+  background: #ffffff;
+  color: #222;
+  font-size: 20px;
+  font-weight: 800;
+  box-shadow: 0 4px 0 rgba(0, 0, 0, 0.2);
+  touch-action: manipulation;
+}

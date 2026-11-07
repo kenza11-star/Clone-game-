@@ -301,18 +301,19 @@ function buildHouse(x, z, style = 0, opts = {}) {
   }
 
   /* pintu di sisi depan (+z) */
-  deco(1.2, 2.2, 0.1, DOOR_MAT, x, 1.1, z + d / 2 + 0.05);
+  const winY = h * 0.6;
+  deco(1.4, 2.8, 0.1, DOOR_MAT, x, 1.4, z + d / 2 + 0.05);
 
   /* jendela depan (2 buah) */
-  deco(1.3, 1.3, 0.1, WINDOW_MAT, x - w / 3, 2.8, z + d / 2 + 0.05);
-  deco(1.3, 1.3, 0.1, WINDOW_MAT, x + w / 3, 2.8, z + d / 2 + 0.05);
+  deco(1.3, 1.3, 0.1, WINDOW_MAT, x - w / 3, winY, z + d / 2 + 0.05);
+  deco(1.3, 1.3, 0.1, WINDOW_MAT, x + w / 3, winY, z + d / 2 + 0.05);
 
   /* jendela samping kiri & kanan */
-  deco(0.1, 1.3, 1.3, WINDOW_MAT, x - w / 2 - 0.05, 2.8, z);
-  deco(0.1, 1.3, 1.3, WINDOW_MAT, x + w / 2 + 0.05, 2.8, z);
+  deco(0.1, 1.3, 1.3, WINDOW_MAT, x - w / 2 - 0.05, winY, z);
+  deco(0.1, 1.3, 1.3, WINDOW_MAT, x + w / 2 + 0.05, winY, z);
 
   const houseNo = opts.n ?? HOUSE_DOORS.length + 1;
-  numberSign(x, 3.85, z + d / 2 + 0.06, houseNo);
+  numberSign(x, h - 0.6, z + d / 2 + 0.06, houseNo);
   HOUSE_DOORS.push({ x, z: z + d / 2 + 1.2, n: houseNo }); // titik berdiri di depan pintu
 
   /* cerobong asap untuk rumah atap genteng */
@@ -341,7 +342,7 @@ function buildHouses() {
         continue;
       }
       if (isCorner) {
-        const towers = { '0,0': 24, '0,3': 30, '3,0': 20, '3,3': 34 };
+        const towers = { '0,0': 14, '0,3': 18, '3,0': 12, '3,3': 22 };
         buildTower(cx, cz, 16, 16, towers[i + ',' + j], TOWER_COLORS[(i + j) % TOWER_COLORS.length]);
         continue;
       }
@@ -350,7 +351,7 @@ function buildHouses() {
       const dd = Math.min(8, IZ1 - IZ0 - 4);
       const style = (i * 2 + j) % HOUSE_STYLES.length;
       const houseNo = i * 4 + j + 1; // nomor tetap berdasarkan posisi blok
-      buildHouse(cx, cz, style, { w, d: dd, h: 4 + (houseNo % 3) * 0.5, n: houseNo });
+      buildHouse(cx, cz, style, { w, d: dd, h: 6 + (houseNo % 3) * 0.5, n: houseNo });
     }
   }
 }
@@ -827,7 +828,7 @@ function buildNPC(name, look, walk, lines, giver = false) {
   }
 
   g.traverse((o) => (o.castShadow = true));
-  g.scale.setScalar(0.5); // tinggi NPC ~1,6 unit, lebih rendah dari mobil
+  g.scale.setScalar(0.76); // tinggi NPC kira-kira sama dengan pemain (2,35 unit)
   scene.add(g);
   const npc = { name, group: g, legs, arms, lines, walk, giver };
   npcs.push(npc);
@@ -973,6 +974,10 @@ function buyItem(it) {
 }
 
 $('btnShopClose').addEventListener('click', closeShop);
+$('btnShopX').addEventListener('click', closeShop);
+window.addEventListener('keydown', (e) => {
+  if (e.code === 'Escape') closeShop();
+});
 
 function talkTo(npc) {
   if (npc.fashion) {
@@ -1060,9 +1065,9 @@ function lightState(axis, t) {
   return p < 5 ? 'R' : p < 9 ? 'G' : 'Y';
 }
 
-const CAR_HW = 1.0;   // setengah lebar mobil
-const CAR_HL = 1.8;   // setengah panjang mobil
-const STOP_DIST = 4.6; // jarak pusat mobil dari persimpangan saat berhenti
+const CAR_HW = 1.2;   // setengah lebar mobil
+const CAR_HL = 3.0;   // setengah panjang mobil
+const STOP_DIST = 6.8; // jarak pusat mobil dari persimpangan saat berhenti
 let hitCD = 0;
 let knockT = 0;
 let knockDir = { x: 0, z: 0 };
@@ -1084,7 +1089,7 @@ function updateTrafficSim(dt) {
     }
 
     let target = c.speed;
-    if (lightState(c.axis, time) === 'R' && ahead > STOP_DIST && ahead < 14) {
+    if (lightState(c.axis, time) === 'R' && ahead > STOP_DIST && ahead < 16) {
       target = Math.min(target, Math.max(0, (ahead - STOP_DIST - 0.4) * 2.5));
     }
 
@@ -1096,7 +1101,7 @@ function updateTrafficSim(dt) {
       if (d < 0) d += LEN;
       if (d < gap) gap = d;
     }
-    if (gap < 8) target = Math.min(target, c.speed * Math.max(0, (gap - 4.5) / 3.5));
+    if (gap < 12) target = Math.min(target, c.speed * Math.max(0, (gap - 7.2) / 4.8));
 
     /* ubah kecepatan perlahan (rem lebih cepat dari akselerasi) */
     const diff = target - c.cur;
@@ -1384,7 +1389,7 @@ function buildMannequin(x, z, shirt, pants) {
 
 /* toko fashion: lantai, dinding samping & belakang, meja kasir, manekin, rak baju */
 function buildFashionShop(cx, cz) {
-  const W = 12, D = 10, H = 6;
+  const W = 12, D = 10, H = 7;
   const wallCol = 0xf8bbd0;
   plat(cx, 0.25, cz, W, D, { type: 'solid', color: 0xf3e5f5 }); // lantai
   addPart(cx, 0.25 + H / 2, cz - D / 2 + 0.25, W, H, 0.5, wallCol); // dinding belakang
@@ -1418,7 +1423,7 @@ function buildFashionShop(cx, cz) {
 /* ---------------------------------------------------------------------
    Tahap 11: model mobil GLB & mobil yang bisa dikendarai pemain
 --------------------------------------------------------------------- */
-const CAR_LEN = 3.6;
+const CAR_LEN = 6.0;
 const gltfLoader = new GLTFLoader();
 let carTemplate = null;
 const pendingCars = [];
@@ -1467,7 +1472,7 @@ const myCar = { x: 11, z: 28, h: 0, v: 0, g: null, col: null };
 
 function buildMyCar() {
   myCar.g = buildCar(myCar.x, myCar.z, 0xffffff);
-  myCar.col = addPart(myCar.x, 0.8, myCar.z, 2, 1.6, 3.6, 0x000000);
+  myCar.col = addPart(myCar.x, 1.0, myCar.z, 2.4, 2.0, 6.0, 0x000000);
   myCar.col.mesh.visible = false; // collider tak terlihat; dinonaktifkan saat dikendarai
 }
 
@@ -1777,7 +1782,8 @@ let state = 'menu'; // menu | play | win
 let time = 0;
 let playTime = 0;
 let deaths = 0;
-let coinCount = 0;
+const START_COINS = 1000; // saldo awal (akses awal)
+let coinCount = START_COINS;
 let currentCP = 0;
 let invuln = 0;
 let jumpBuf = 0;
@@ -1803,7 +1809,7 @@ function fmtTime(t) {
 }
 function updateHud() {
   hudStage.textContent = 'Stage ' + (currentCP + 1) + '/' + TOTAL_STAGES + ' · ' + STAGE_NAMES[currentCP];
-  hudCoins.textContent = 'Koin ' + coinCount + '/' + coins.length;
+  hudCoins.textContent = 'Koin ' + coinCount;
   hudDeaths.textContent = 'Jatuh ' + deaths;
   hudTime.textContent = fmtTime(playTime);
 }
@@ -2001,7 +2007,7 @@ function respawn(countDeath) {
 function resetGame() {
   resetMission();
   deaths = 0;
-  coinCount = 0;
+  coinCount = START_COINS;
   playTime = 0;
   currentCP = 0;
   for (const c of coins) {
@@ -2027,7 +2033,7 @@ function winGame() {
   state = 'win';
   sfx.win();
   $('winStats').textContent =
-    'Waktu ' + fmtTime(playTime) + '  •  Koin ' + coinCount + '/' + coins.length + '  •  Jatuh ' + deaths;
+    'Waktu ' + fmtTime(playTime) + '  •  Koin ' + coinCount + '  •  Jatuh ' + deaths;
   $('winScreen').classList.remove('hidden');
 }
 

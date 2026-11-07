@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="id">
+  <head>
+    <meta charset="utf-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover"
+    />
+    <meta name="theme-color" content="#8fd3ff" />
+    <title>Block Obby</title>
+  </head>
+  <body>
+    <canvas id="game"></canvas>
+
+    <div id="hud">
+      <div class="hud-left">
+        <div class="pill" id="hudStage">Stage 1/7</div>
+        <div class="pill" id="hudCoins">Koin 0/0</div>
+      </div>
+      <div class="hud-right">
+        <div class="pill" id="hudTime">00:00</div>
+        <div class="pill" id="hudDeaths">Jatuh 0</div>
+        <button class="iconbtn" id="btnRespawn" aria-label="Ulang dari checkpoint">&#8635;</button>
+        <button class="iconbtn" id="btnMute" aria-label="Suara">&#128266;</button>
+      </div>
+    </div>
+
+    <div id="joyZone"></div>
+    <div id="joyBase"><div id="joyKnob"></div></div>
+    <button id="btnJump">LOMPAT</button>
+
+    <div id="toast"></div>
+    <div id="flash"></div>
+
+    <div id="startScreen" class="screen">
+      <h1>BLOCK<br />OBBY</h1>
+      <p class="sub">Lewati 7 stage, hindari lava, kumpulkan koin, capai piala emas!</p>
+      <button class="big" id="btnStart">MULAI MAIN</button>
+      <p class="hint">
+        Joystick kiri = jalan &nbsp;&bull;&nbsp; Tombol kanan = lompat &nbsp;&bull;&nbsp; Geser layar = putar kamera<br />
+        Keyboard: WASD jalan, Spasi lompat, panah kiri/kanan putar kamera
+      </p>
+    </div>
+
+    <div id="winScreen" class="screen hidden">
+      <h1>KAMU MENANG!</h1>
+      <p class="sub" id="winStats"></p>
+      <button class="big" id="btnAgain">MAIN LAGI</button>
+    </div>
+
+    <script type="module" src="/src/main.js"></script>
+  </body>
+</html>

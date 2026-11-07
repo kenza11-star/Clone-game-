@@ -1,0 +1,11 @@
+{
+  "appId": "com.xhen.blockobby",
+  "appName": "Block Obby",
+  "webDir": "dist",
+  "server": {
+    "androidScheme": "https"
+  },
+  "android": {
+    "backgroundColor": "#8fd3ff"
+  }
+}

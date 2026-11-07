@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import './style.css';
+import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 
 /* =====================================================================
    BLOCK OBBY - game obby 3D dengan karakter kotak ala Roblox
@@ -310,7 +311,7 @@ function buildHouse(x, z, style = 0, opts = {}) {
   deco(0.1, 1.3, 1.3, WINDOW_MAT, x - w / 2 - 0.05, 2.8, z);
   deco(0.1, 1.3, 1.3, WINDOW_MAT, x + w / 2 + 0.05, 2.8, z);
 
-  const houseNo = HOUSE_DOORS.length + 1;
+  const houseNo = opts.n ?? HOUSE_DOORS.length + 1;
   numberSign(x, 3.85, z + d / 2 + 0.06, houseNo);
   HOUSE_DOORS.push({ x, z: z + d / 2 + 1.2, n: houseNo }); // titik berdiri di depan pintu
 
@@ -321,9 +322,6 @@ function buildHouse(x, z, style = 0, opts = {}) {
 }
 
 function buildHouses() {
-  const MIN = GRID_LINES[0];
-  const MAX = GRID_LINES[GRID_LINES.length - 1];
-  let n = 0;
   for (let i = 0; i < GRID_LINES.length - 1; i++) {
     for (let j = 0; j < GRID_LINES.length - 1; j++) {
       const a = GRID_LINES[i], b = GRID_LINES[i + 1];
@@ -335,11 +333,24 @@ function buildHouses() {
       const IZ1 = d - (isRoad(d) ? ROAD_W / 2 : 0) - WALK_W;
       const cx = (IX0 + IX1) / 2;
       const cz = (IZ0 + IZ1) / 2;
+
+      /* empat blok sudut: gedung pencakar langit */
+      const isCorner = (i === 0 || i === 3) && (j === 0 || j === 3);
+      if (i === 1 && j === 1) {
+        buildFashionShop(cx, cz); // toko fashion
+        continue;
+      }
+      if (isCorner) {
+        const towers = { '0,0': 24, '0,3': 30, '3,0': 20, '3,3': 34 };
+        buildTower(cx, cz, 16, 16, towers[i + ',' + j], TOWER_COLORS[(i + j) % TOWER_COLORS.length]);
+        continue;
+      }
+
       const w = Math.min(8, IX1 - IX0 - 4);
       const dd = Math.min(8, IZ1 - IZ0 - 4);
       const style = (i * 2 + j) % HOUSE_STYLES.length;
-      buildHouse(cx, cz, style, { w, d: dd, h: 4 + (n % 3) * 0.5 });
-      n++;
+      const houseNo = i * 4 + j + 1; // nomor tetap berdasarkan posisi blok
+      buildHouse(cx, cz, style, { w, d: dd, h: 4 + (houseNo % 3) * 0.5, n: houseNo });
     }
   }
 }
@@ -419,37 +430,10 @@ function buildBin(x, z) {
 /* mobil kotak diparkir di pinggir jalan */
 function buildCar(x, z, color) {
   const g = new THREE.Group();
-  const body = new THREE.Mesh(
-    new THREE.BoxGeometry(2, 0.9, 3.6),
-    new THREE.MeshLambertMaterial({ color }),
-  );
-  body.position.y = 0.6;
-  g.add(body);
-  /* lampu depan (kuning) dan belakang (merah) di kedua ujung mobil */
-  for (const lz of [-1.81, 1.81]) {
-    const lampMat = lz > 0
-      ? new THREE.MeshLambertMaterial({ color: 0xfff3b0, emissive: 0xffd966 })
-      : new THREE.MeshLambertMaterial({ color: 0xff3b3b, emissive: 0x991111 });
-    for (const lx of [-0.6, 0.6]) {
-      const light = new THREE.Mesh(new THREE.BoxGeometry(0.4, 0.2, 0.05), lampMat);
-      light.position.set(lx, 0.6, lz);
-      g.add(light);
-    }
-  }
-  const cabin = new THREE.Mesh(
-    new THREE.BoxGeometry(1.7, 0.7, 1.9),
-    new THREE.MeshLambertMaterial({ color: 0x9fd8ff }),
-  );
-  cabin.position.set(0, 1.35, -0.2);
-  g.add(cabin);
-  for (const [wx, wz] of [[-1.05, -1.2], [1.05, -1.2], [-1.05, 1.2], [1.05, 1.2]]) {
-    const tire = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.6, 0.6), TIRE_MAT);
-    tire.position.set(wx, 0.3, wz);
-    g.add(tire);
-  }
-  g.traverse((o) => (o.castShadow = true));
   g.position.set(x, 0, z);
   scene.add(g);
+  attachCarModel(g);
+  return g;
 }
 
 function buildDecor() {
@@ -550,6 +534,13 @@ btnAction.addEventListener('pointerdown', (e) => {
 function checkInteract() {
   const pos = player.pos;
   updateNPCs(performance.now() / 1000);
+  if (driving) {
+    btnAction.style.display = 'block';
+    btnAction.textContent = 'TURUN';
+    if (actionBuf) exitCar();
+    actionBuf = false;
+    return;
+  }
   /* jika pemain jatuh/respawn keluar ruangan, anggap sudah di luar */
   if (inside && Math.abs(pos.x - ROOM.x) > 8) inside = false;
 
@@ -561,6 +552,10 @@ function checkInteract() {
       action = exitHouse;
     }
   } else {
+    if (Math.hypot(pos.x - myCar.x, pos.z - myCar.z) < 3.5) {
+      label = 'NAIK';
+      action = enterCar;
+    }
     for (const npc of npcs) {
       const p = npc.group.position;
       if (Math.hypot(pos.x - p.x, pos.z - p.z) < 2.5) {
@@ -832,6 +827,7 @@ function buildNPC(name, look, walk, lines, giver = false) {
   }
 
   g.traverse((o) => (o.castShadow = true));
+  g.scale.setScalar(0.5); // tinggi NPC ~1,6 unit, lebih rendah dari mobil
   scene.add(g);
   const npc = { name, group: g, legs, arms, lines, walk, giver };
   npcs.push(npc);
@@ -878,7 +874,7 @@ function buildNPCs() {
       cx,
       amp,
       z: Z1 - WALK_W / 2,
-      speed: 0.6 + (k % 3) * 0.15,
+      vel: 0.9 + (k % 3) * 0.25, // unit per detik
       ph: k * 1.3,
     }, WORDS[k % WORDS.length]);
   });
@@ -887,11 +883,11 @@ function buildNPCs() {
 function updateNPCs(t) {
   for (const npc of npcs) {
     if (!npc.walk) continue;
-    const { cx, amp, z, speed, ph } = npc.walk;
-    const s = t * speed + ph;
+    const { cx, amp, z, vel, ph } = npc.walk;
+    const s = t * (vel / amp) + ph;
     npc.group.position.set(cx + Math.sin(s) * amp, WALK_TOP, z);
     npc.group.rotation.y = Math.cos(s) > 0 ? Math.PI / 2 : -Math.PI / 2;
-    const swing = Math.sin(t * speed * 5 + ph) * 0.6;
+    const swing = Math.sin(t * 4 + ph) * 0.5;
     npc.legs[0].rotation.x = swing;
     npc.legs[1].rotation.x = -swing;
     npc.arms[0].rotation.x = -swing;
@@ -924,7 +920,65 @@ function resetMission() {
   hideDialog();
 }
 
+/* katalog toko fashion (panel HTML) */
+function openShop() {
+  const box = $('shopItems');
+  box.innerHTML = '';
+  for (const it of SHOP_ITEMS) {
+    const b = document.createElement('button');
+    b.className = 'shopitem';
+    b.innerHTML =
+      '<span><span class="sw" style="background:' + hexCss(it.shirt ?? it.swatch) + '"></span>' + it.name + '</span>' +
+      '<span>' + it.price + ' koin</span>';
+    b.addEventListener('click', () => buyItem(it));
+    box.appendChild(b);
+  }
+  $('shopPanel').classList.remove('hidden');
+}
+
+function closeShop() {
+  $('shopPanel').classList.add('hidden');
+}
+
+function buyItem(it) {
+  if (it.model !== undefined) {
+    if (it.model !== null && !charModels[it.model]) {
+      toast('Karakter masih dimuat, coba lagi');
+      return;
+    }
+    if (coinCount < it.price) {
+      toast('Koin kamu kurang');
+      return;
+    }
+    coinCount -= it.price;
+    updateHud();
+    setCharacter(it.model);
+    toast('Sekarang pakai ' + it.name);
+    closeShop();
+    return;
+  }
+
+  if (coinCount < it.price) {
+    toast('Koin kamu kurang');
+    return;
+  }
+  coinCount -= it.price;
+  updateHud();
+  setCharacter(null); // baju hanya berlaku untuk karakter asli
+  char.children[0].material.color.setHex(it.shirt);
+  legL.children[0].material.color.setHex(it.pants);
+  legR.children[0].material.color.setHex(it.pants);
+  toast('Berhasil beli ' + it.name);
+  closeShop();
+}
+
+$('btnShopClose').addEventListener('click', closeShop);
+
 function talkTo(npc) {
+  if (npc.fashion) {
+    openShop();
+    return;
+  }
   if (npc.shop) {
     if (coinCount >= 2) {
       coinCount -= 2;
@@ -1080,7 +1134,7 @@ function clearanceAt(x, z, y) {
 /* mobil menabrak pemain: pemain terpental ke samping mobil, tidak ikut terdorong searah jalan */
 function collideTraffic(dt) {
   const pos = player.pos;
-  if (state !== 'play') return;
+  if (state !== 'play' || driving) return;
 
   if (knockT > 0) {
     knockT -= dt;
@@ -1207,7 +1261,7 @@ function buildStall(cx, cz, name) {
 
 function buildStalls() {
   /* tiga warung di tengah blok-blok taman */
-  const spots = [[1, 2, 'Bu Warung'], [2, 1, 'Pak Kopi'], [3, 3, 'Mbak Roti']];
+  const spots = [[1, 2, 'Bu Warung'], [2, 1, 'Pak Kopi'], [2, 2, 'Mbak Roti']];
   for (const [i, j, name] of spots) {
     const a = GRID_LINES[i], b = GRID_LINES[i + 1];
     const c = GRID_LINES[j], d = GRID_LINES[j + 1];
@@ -1220,6 +1274,374 @@ function buildStalls() {
     buildStall(cx + 8, cz - 7, name);
   }
 }
+
+/* ---------------------------------------------------------------------
+   Tahap 9: gedung pencakar langit di blok sudut
+--------------------------------------------------------------------- */
+const TOWER_COLORS = [0x90a4ae, 0xb0bec5, 0x78909c, 0xcfd8dc];
+
+function buildTower(cx, cz, w, d, h, color) {
+  /* badan gedung ikut sistem collision */
+  addPart(cx, h / 2, cz, w, h, d, color);
+
+  /* atap, antena, dan lampu merah di puncak */
+  deco(w + 0.6, 0.6, d + 0.6, new THREE.MeshLambertMaterial({ color: 0x546e7a }), cx, h + 0.3, cz);
+  deco(0.2, 3, 0.2, POLE_MAT, cx, h + 2.1, cz);
+  deco(0.3, 0.3, 0.3, new THREE.MeshLambertMaterial({ color: 0xff3b3b, emissive: 0x991111 }), cx, h + 3.7, cz);
+
+  /* pintu masuk lobi di depan */
+  deco(3, 3, 0.2, DOOR_MAT, cx, 1.5, cz + d / 2 + 0.1);
+
+  /* jendela sebagai satu InstancedMesh (hemat draw call) */
+  const floors = Math.floor((h - 2) / 3);
+  const cols = Math.floor(w / 2.5);
+  const colsD = Math.floor(d / 2.5);
+  const count = floors * (cols * 2 + colsD * 2);
+  const inst = new THREE.InstancedMesh(new THREE.BoxGeometry(0.9, 1.4, 0.12), WINDOW_MAT, count);
+  const dummy = new THREE.Object3D();
+  let k = 0;
+  for (let f = 0; f < floors; f++) {
+    const y = 3.5 + f * 3;
+    for (let i = 0; i < cols; i++) {
+      const x = cx - w / 2 + (i + 0.5) * (w / cols);
+      dummy.position.set(x, y, cz + d / 2 + 0.07);
+      dummy.rotation.set(0, 0, 0);
+      dummy.updateMatrix();
+      inst.setMatrixAt(k++, dummy.matrix);
+      dummy.position.set(x, y, cz - d / 2 - 0.07);
+      dummy.updateMatrix();
+      inst.setMatrixAt(k++, dummy.matrix);
+    }
+    for (let j = 0; j < colsD; j++) {
+      const z = cz - d / 2 + (j + 0.5) * (d / colsD);
+      dummy.rotation.set(0, Math.PI / 2, 0);
+      dummy.position.set(cx + w / 2 + 0.07, y, z);
+      dummy.updateMatrix();
+      inst.setMatrixAt(k++, dummy.matrix);
+      dummy.position.set(cx - w / 2 - 0.07, y, z);
+      dummy.updateMatrix();
+      inst.setMatrixAt(k++, dummy.matrix);
+    }
+  }
+  inst.instanceMatrix.needsUpdate = true;
+  scene.add(inst);
+}
+
+/* ---------------------------------------------------------------------
+   Tahap 10: toko fashion (ganti baju pemain)
+--------------------------------------------------------------------- */
+const SHOP_ITEMS = [
+  { name: 'Karakter Asli', price: 0, model: null, swatch: 0x2f6fed },
+  { name: 'Bone Armour', price: 8, model: 'bone', swatch: 0xdddddd },
+  { name: 'Special Forces', price: 8, model: 'special', swatch: 0x556b2f },
+  { name: 'MixPat', price: 7, model: 'mixpat', swatch: 0x9e9e9e },
+  { name: 'Tactical', price: 7, model: 'tactical', swatch: 0x4e5a3a },
+  { name: 'Officer', price: 6, model: 'officer', swatch: 0x1e3a8a },
+  { name: 'Kaos Merah', price: 3, shirt: 0xe53935, pants: 0x333366 },
+  { name: 'Kemeja Biru', price: 3, shirt: 0x1e88e5, pants: 0x4e342e },
+  { name: 'Jaket Hijau', price: 4, shirt: 0x43a047, pants: 0x212121 },
+  { name: 'Hoodie Ungu', price: 5, shirt: 0x8e24aa, pants: 0x546e7a },
+];
+const hexCss = (c) => '#' + c.toString(16).padStart(6, '0');
+
+/* papan nama bertulisan (dipakai untuk "FASHION") */
+function textSign(text, x, y, z, w, h, bg, fg) {
+  const c = document.createElement('canvas');
+  c.width = 512;
+  c.height = 128;
+  const ctx = c.getContext('2d');
+  ctx.fillStyle = bg;
+  ctx.fillRect(0, 0, 512, 128);
+  ctx.fillStyle = fg;
+  ctx.font = 'bold 84px sans-serif';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText(text, 256, 68);
+  const mesh = new THREE.Mesh(
+    new THREE.PlaneGeometry(w, h),
+    new THREE.MeshBasicMaterial({ map: new THREE.CanvasTexture(c) }),
+  );
+  mesh.position.set(x, y, z);
+  scene.add(mesh);
+}
+
+/* manekin: alas, badan berbaju, dan kepala */
+function buildMannequin(x, z, shirt, pants) {
+  const g = new THREE.Group();
+  const base = new THREE.Mesh(new THREE.BoxGeometry(0.7, 0.2, 0.7), new THREE.MeshLambertMaterial({ color: 0x6d4c41 }));
+  base.position.y = 0.1;
+  const torso = new THREE.Mesh(new THREE.BoxGeometry(0.6, 0.9, 0.4), new THREE.MeshLambertMaterial({ color: shirt }));
+  torso.position.y = 0.65;
+  const legs = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.8, 0.35), new THREE.MeshLambertMaterial({ color: pants }));
+  legs.position.y = -0.2;
+  const head = new THREE.Mesh(new THREE.SphereGeometry(0.22, 12, 10), new THREE.MeshLambertMaterial({ color: 0xf5d5c0 }));
+  head.position.y = 1.3;
+  g.add(base, torso, legs, head);
+  g.traverse((o) => (o.castShadow = true));
+  g.position.set(x, 0.25, z);
+  scene.add(g);
+}
+
+/* toko fashion: lantai, dinding samping & belakang, meja kasir, manekin, rak baju */
+function buildFashionShop(cx, cz) {
+  const W = 12, D = 10, H = 6;
+  const wallCol = 0xf8bbd0;
+  plat(cx, 0.25, cz, W, D, { type: 'solid', color: 0xf3e5f5 }); // lantai
+  addPart(cx, 0.25 + H / 2, cz - D / 2 + 0.25, W, H, 0.5, wallCol); // dinding belakang
+  addPart(cx - W / 2 + 0.25, 0.25 + H / 2, cz, 0.5, H, D, wallCol); // dinding kiri
+  addPart(cx + W / 2 - 0.25, 0.25 + H / 2, cz, 0.5, H, D, wallCol); // dinding kanan
+  deco(W + 0.6, 0.5, D + 0.6, new THREE.MeshLambertMaterial({ color: 0x6a1b9a }), cx, 0.25 + H + 0.25, cz); // atap
+
+  /* kanopi bergaris di depan toko */
+  [0xe53935, 0xffffff, 0xe53935, 0xffffff].forEach((col, i) => {
+    deco(W / 3, 0.15, 1.6, new THREE.MeshLambertMaterial({ color: col }), cx - W / 2 + (i + 0.5) * (W / 4), H - 0.2, cz + D / 2 + 0.6);
+  });
+  textSign('FASHION', cx, H + 1.4, cz + D / 2 + 0.06, 6, 1.5, '#6a1b9a', '#ffffff');
+
+  /* manekin berpakaian & rak gantung */
+  buildMannequin(cx - 3.5, cz - 2.5, SHOP_ITEMS[0].shirt, SHOP_ITEMS[0].pants);
+  buildMannequin(cx, cz - 3, SHOP_ITEMS[2].shirt, SHOP_ITEMS[2].pants);
+  buildMannequin(cx + 3.5, cz - 2.5, SHOP_ITEMS[3].shirt, SHOP_ITEMS[3].pants);
+  deco(4, 0.08, 0.08, POLE_MAT, cx - 3.5, 1.9, cz + 3.2);
+  [0xffb300, 0x26c6da, 0xec407a].forEach((col, i) => {
+    deco(0.5, 0.9, 0.05, new THREE.MeshLambertMaterial({ color: col }), cx - 4.4 + i * 0.9, 1.4, cz + 3.2);
+  });
+
+  /* meja kasir (bisa ditabrak) & penjaga toko di belakangnya */
+  addPart(cx, 0.25 + 0.55, cz + 2.3, 4, 1.1, 1.0, 0xbcaaa4);
+  const keeper = buildNPC('Mbak Fashion', randomLook(), null, ['Selamat datang! Yuk lihat-lihat dulu.'], false);
+  keeper.fashion = true;
+  keeper.group.position.set(cx, 0.25, cz + 1.2);
+  keeper.group.rotation.y = Math.PI;
+}
+
+/* ---------------------------------------------------------------------
+   Tahap 11: model mobil GLB & mobil yang bisa dikendarai pemain
+--------------------------------------------------------------------- */
+const CAR_LEN = 3.6;
+const gltfLoader = new GLTFLoader();
+let carTemplate = null;
+const pendingCars = [];
+
+/* sesuaikan ukuran model: panjang 3.6 unit searah sumbu Z, dasar tepat di y = 0 */
+function fitCarModel(root) {
+  const holder = new THREE.Group();
+  holder.add(root);
+  let box = new THREE.Box3().setFromObject(holder);
+  let size = box.getSize(new THREE.Vector3());
+  if (size.x > size.z) root.rotation.y = Math.PI / 2;
+  box = new THREE.Box3().setFromObject(holder);
+  size = box.getSize(new THREE.Vector3());
+  root.scale.setScalar(CAR_LEN / size.z);
+  box = new THREE.Box3().setFromObject(holder);
+  const c = box.getCenter(new THREE.Vector3());
+  root.position.set(-c.x, -box.min.y, -c.z);
+  holder.traverse((o) => {
+    if (o.isMesh) {
+      o.castShadow = true;
+      o.receiveShadow = true;
+    }
+  });
+  return holder;
+}
+
+gltfLoader.load(
+  '/car_roblox.glb',
+  (gltf) => {
+    carTemplate = fitCarModel(gltf.scene);
+    for (const g of pendingCars) g.add(carTemplate.clone(true));
+    pendingCars.length = 0;
+  },
+  undefined,
+  (err) => console.error('Gagal memuat mobil:', err),
+);
+
+function attachCarModel(g) {
+  if (carTemplate) g.add(carTemplate.clone(true));
+  else pendingCars.push(g);
+}
+
+/* mobil pemain: diparkir di blok (2,2), bisa dinaiki dengan tombol NAIK */
+let driving = false;
+const myCar = { x: 11, z: 28, h: 0, v: 0, g: null, col: null };
+
+function buildMyCar() {
+  myCar.g = buildCar(myCar.x, myCar.z, 0xffffff);
+  myCar.col = addPart(myCar.x, 0.8, myCar.z, 2, 1.6, 3.6, 0x000000);
+  myCar.col.mesh.visible = false; // collider tak terlihat; dinonaktifkan saat dikendarai
+}
+
+/* kotak tabrakan mobil yang sudah diputar (AABB) */
+function carBox(h) {
+  const c = Math.abs(Math.cos(h));
+  const s = Math.abs(Math.sin(h));
+  return { hx: CAR_HW * c + CAR_HL * s, hz: CAR_HL * c + CAR_HW * s };
+}
+
+function carFree(x, z, h) {
+  const { hx, hz } = carBox(h);
+  for (const b of colliders) {
+    if (!b.active || b.maxY <= 0.4) continue; // trotoar boleh dilewati mobil
+    if (x + hx <= b.minX || x - hx >= b.maxX || z + hz <= b.minZ || z - hz >= b.maxZ) continue;
+    return false;
+  }
+  for (const c of traffic) {
+    const tx = c.axis === 'z' ? c.lane : c.s;
+    const tz = c.axis === 'z' ? c.s : c.lane;
+    const thx = c.axis === 'z' ? CAR_HW : CAR_HL;
+    const thz = c.axis === 'z' ? CAR_HL : CAR_HW;
+    if (Math.abs(x - tx) < hx + thx && Math.abs(z - tz) < hz + thz) return false;
+  }
+  return true;
+}
+
+function carGroundY(x, z, h) {
+  const { hx, hz } = carBox(h);
+  let gy = 0;
+  for (const b of colliders) {
+    if (!b.active || b.maxY > 0.4) continue;
+    if (x + hx <= b.minX || x - hx >= b.maxX || z + hz <= b.minZ || z - hz >= b.maxZ) continue;
+    if (b.maxY > gy) gy = b.maxY;
+  }
+  return gy;
+}
+
+function enterCar() {
+  driving = true;
+  myCar.v = 0;
+  myCar.col.active = false;
+  char.visible = false;
+  toast('Kamu naik mobil. W/S atau joystick untuk jalan, A/D untuk belok.');
+}
+
+function exitCar() {
+  const cos = Math.cos(myCar.h), sin = Math.sin(myCar.h);
+  const sides = [[cos, -sin], [-cos, sin]];
+  for (const [dx, dz] of sides) {
+    const px = myCar.x + dx * 2.6;
+    const pz = myCar.z + dz * 2.6;
+    if (clearanceAt(px, pz, 0.05) !== null) {
+      driving = false;
+      char.visible = true;
+      myCar.col.active = true;
+      myCar.col.mesh.position.set(myCar.x, 0.8, myCar.z);
+      updateBounds(myCar.col);
+      myCar.v = 0;
+      teleportPlayer(px, pz);
+      toast('Kamu turun dari mobil');
+      return;
+    }
+  }
+  toast('Tidak ada tempat untuk turun');
+}
+
+function updateCar(dt) {
+  const f = -joyY + (keys.KeyW ? 1 : 0) - (keys.KeyS ? 1 : 0);
+  const r = joyX + (keys.KeyD ? 1 : 0) - (keys.KeyA ? 1 : 0);
+  const fc = Math.max(-1, Math.min(1, f));
+  const rc = Math.max(-1, Math.min(1, r));
+
+  const target = fc >= 0 ? fc * 13 : fc * 6;
+  const dv = target - myCar.v;
+  myCar.v += Math.max(-18 * dt, Math.min(9 * dt, dv));
+  myCar.v = Math.max(-6, Math.min(16, myCar.v));
+
+  if (Math.abs(myCar.v) > 0.3) {
+    myCar.h += rc * dt * 1.8 * Math.sign(myCar.v) * Math.min(1, Math.abs(myCar.v) / 8);
+  }
+
+  const nx = myCar.x + Math.sin(myCar.h) * myCar.v * dt;
+  const nz = myCar.z + Math.cos(myCar.h) * myCar.v * dt;
+  if (carFree(nx, nz, myCar.h)) {
+    myCar.x = nx;
+    myCar.z = nz;
+  } else {
+    myCar.v *= -0.3; // menabrak: mundur sedikit
+  }
+
+  const gy = carGroundY(myCar.x, myCar.z, myCar.h);
+  myCar.g.position.set(myCar.x, gy, myCar.z);
+  myCar.g.rotation.y = myCar.h;
+  player.pos.set(myCar.x, gy + 0.05, myCar.z);
+  player.vel.set(0, 0, 0);
+  player.ground = null;
+  player.grounded = true;
+}
+
+/* ---------------------------------------------------------------------
+   Tahap 12: karakter GLB dari toko fashion
+--------------------------------------------------------------------- */
+const charModels = {}; // key -> grup yang sudah diukur (tinggi 2,35 unit, kaki di y = 0)
+let activeModel = null;
+
+/* ukur ulang model supaya sama tinggi dengan pemain dan berdiri di atas tanah */
+function fitCharacterObject(obj) {
+  const wrap = new THREE.Group();
+  wrap.add(obj);
+  let box = new THREE.Box3().setFromObject(wrap);
+  const size = box.getSize(new THREE.Vector3());
+  wrap.scale.setScalar(2.35 / size.y);
+  box = new THREE.Box3().setFromObject(wrap);
+  const c = box.getCenter(new THREE.Vector3());
+  wrap.position.set(-c.x, -box.min.y, -c.z);
+  wrap.traverse((o) => {
+    if (o.isMesh || o.isSkinnedMesh) {
+      o.castShadow = true;
+      o.receiveShadow = true;
+    }
+  });
+  return wrap;
+}
+
+function loadCharacters() {
+  const loader = new GLTFLoader();
+  loader.load(
+    '/roblox_bone_armour_with_skull.glb',
+    (gltf) => {
+      charModels.bone = fitCharacterObject(gltf.scene);
+    },
+    undefined,
+    (err) => console.error('Gagal memuat Bone Armour:', err),
+  );
+
+  /* satu file berisi beberapa karakter; ambil versi yang sudah ber-rig (skinned) */
+  const picks = {
+    special: 'Special Forces_582',
+    mixpat: 'MixPat_382',
+    tactical: 'Tactical Charecter_682',
+    officer: 'Officer.001_482',
+  };
+  loader.load(
+    '/roblox_characters.glb',
+    (gltf) => {
+      for (const [key, name] of Object.entries(picks)) {
+        const obj = gltf.scene.getObjectByName(name);
+        if (obj) charModels[key] = fitCharacterObject(obj);
+        else console.warn('Karakter tidak ditemukan:', name);
+      }
+    },
+    undefined,
+    (err) => console.error('Gagal memuat karakter:', err),
+  );
+}
+
+/* pasang karakter GLB di pemain, atau kembali ke karakter asli (key = null) */
+function setCharacter(key) {
+  if (activeModel) {
+    char.remove(activeModel);
+    activeModel = null;
+  }
+  if (!key) {
+    char.children.forEach((c) => (c.visible = true));
+    return;
+  }
+  char.children.forEach((c) => (c.visible = false)); // sembunyikan kotak bawaan
+  activeModel = charModels[key];
+  char.add(activeModel);
+  activeModel.visible = true;
+}
+
+loadCharacters();
 
 let trophy = null;
 function buildTrophy(x, y, z) {
@@ -1264,6 +1686,7 @@ buildNPCs();
 buildTraffic();
 buildSignals();
 buildStalls();
+buildMyCar();
 
 const colliders = solids.filter((s) => s.type !== 'lava');
 const hazards = solids.filter((s) => s.type === 'lava');
@@ -1557,6 +1980,11 @@ function setCheckpoint(n) {
 
 function respawn(countDeath) {
   const p = cpPos[currentCP];
+  if (driving) {
+    driving = false;
+    char.visible = true;
+    myCar.col.active = true;
+  }
   player.pos.set(p.x, p.y, p.z);
   player.vel.set(0, 0, 0);
   player.ground = null;
@@ -1888,7 +2316,8 @@ function frame(now) {
     playTime += dt;
     invuln -= dt;
     const n = Math.max(1, Math.ceil(dt / 0.0125));
-    for (let i = 0; i < n; i++) stepPlayer(dt / n);
+    if (driving) updateCar(dt);
+    else for (let i = 0; i < n; i++) stepPlayer(dt / n);
     checkEvents();
     hudTimer += dt;
     if (hudTimer > 0.25) {

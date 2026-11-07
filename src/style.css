@@ -293,3 +293,35 @@ body {
   color: #888;
   text-align: right;
 }
+
+
+/* Katalog toko fashion */
+#shopItems {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  width: min(88vw, 360px);
+  margin: 12px 0 18px;
+}
+.shopitem {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px 16px;
+  border: none;
+  border-radius: 14px;
+  background: #ffffff;
+  color: #222;
+  font-weight: 700;
+  font-size: 16px;
+  box-shadow: 0 4px 0 rgba(0, 0, 0, 0.2);
+  touch-action: manipulation;
+}
+.shopitem .sw {
+  display: inline-block;
+  width: 22px;
+  height: 22px;
+  border-radius: 6px;
+  margin-right: 10px;
+  vertical-align: middle;
+}

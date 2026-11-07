@@ -239,3 +239,57 @@ body {
 .hidden {
   display: none !important;
 }
+
+
+/* Tombol aksi (MASUK / KELUAR) saat dekat pintu rumah */
+#btnAction {
+  position: fixed;
+  right: 24px;
+  bottom: calc(190px + env(safe-area-inset-bottom, 0px));
+  z-index: 20;
+  padding: 14px 20px;
+  border: none;
+  border-radius: 16px;
+  background: #ffd23f;
+  color: #222;
+  font-weight: 800;
+  font-size: 16px;
+  box-shadow: 0 4px 0 #c99a00;
+  touch-action: manipulation;
+}
+#btnAction:active {
+  transform: translateY(2px);
+  box-shadow: 0 2px 0 #c99a00;
+}
+
+
+/* Kotak dialog NPC */
+#dialog {
+  position: fixed;
+  left: 50%;
+  transform: translateX(-50%);
+  bottom: calc(16px + env(safe-area-inset-bottom, 0px));
+  width: min(92vw, 440px);
+  z-index: 30;
+  background: #ffffff;
+  color: #222;
+  border-radius: 18px;
+  padding: 14px 18px;
+  box-shadow: 0 6px 0 rgba(0, 0, 0, 0.18);
+  touch-action: manipulation;
+}
+#dlgName {
+  font-weight: 800;
+  color: #e53935;
+  margin-bottom: 4px;
+}
+#dlgText {
+  font-size: 15px;
+  line-height: 1.4;
+}
+#dialog .dlg-hint {
+  margin-top: 8px;
+  font-size: 11px;
+  color: #888;
+  text-align: right;
+}
